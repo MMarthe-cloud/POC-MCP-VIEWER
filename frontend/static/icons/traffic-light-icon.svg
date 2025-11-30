@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
+  <!-- Vertical rectangle housing -->
+  <rect x="8" y="3" width="8" height="18" rx="1" fill="#333333" stroke="#FFFFFF" stroke-width="2"/>
+  <!-- Three lights: red, yellow, green -->
+  <circle cx="12" cy="7" r="2" fill="#FF0000"/>
+  <circle cx="12" cy="12" r="2" fill="#FFD700"/>
+  <circle cx="12" cy="17" r="2" fill="#00FF00"/>
+</svg>
+

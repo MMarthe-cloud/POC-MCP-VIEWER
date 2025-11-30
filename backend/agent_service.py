@@ -22,8 +22,12 @@ MAPPING_TOOLS = [
                 "properties": {
                     "feature_type": {
                         "type": "string",
-                        "enum": ["stop_sign", "speed_limit", "crosswalk", "guardrail", "pole", "all"],
-                        "description": "Type of feature to show. Use 'guardrail' not 'rail'."
+                        "enum": [
+                            "pavement_damage", "road_marking", "manhole_cover", "drainage_grate", "pavement_patch",
+                            "traffic_sign", "street_light", "utility_pole", "trash_bin", "fire_hydrant", 
+                            "traffic_light", "vegetation", "all"
+                        ],
+                        "description": "Type of feature to show (horizontal: pavement_damage, road_marking, manhole_cover, drainage_grate, pavement_patch; vertical: traffic_sign, street_light, utility_pole, trash_bin, fire_hydrant, traffic_light, vegetation)"
                     },
                     "condition": {
                         "type": "string",
@@ -56,13 +60,17 @@ MAPPING_TOOLS = [
         "type": "function",
         "function": {
             "name": "find_images_with_features",
-            "description": "Find image positions that contain specific features. Use this for questions like 'which images have stop signs' or 'images containing damaged features'",
+            "description": "Find image positions that contain specific features. Use this for questions like 'which images have traffic signs' or 'images containing damaged features'",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "feature_type": {
                         "type": "string",
-                        "enum": ["stop_sign", "speed_limit", "crosswalk", "guardrail", "pole", "any"],
+                        "enum": [
+                            "pavement_damage", "road_marking", "manhole_cover", "drainage_grate", "pavement_patch",
+                            "traffic_sign", "street_light", "utility_pole", "trash_bin", "fire_hydrant", 
+                            "traffic_light", "vegetation", "any"
+                        ],
                         "description": "Type of feature to look for in images"
                     },
                     "condition": {
@@ -85,7 +93,11 @@ MAPPING_TOOLS = [
                 "properties": {
                     "feature_type": {
                         "type": "string",
-                        "enum": ["stop_sign", "speed_limit", "crosswalk", "guardrail", "pole", "any"],
+                        "enum": [
+                            "pavement_damage", "road_marking", "manhole_cover", "drainage_grate", "pavement_patch",
+                            "traffic_sign", "street_light", "utility_pole", "trash_bin", "fire_hydrant", 
+                            "traffic_light", "vegetation", "any"
+                        ],
                         "description": "Optional: filter to specific feature type"
                     },
                     "condition": {
@@ -354,7 +366,7 @@ class MappingAgent:
         """
         
         # System prompt to guide the model
-        system_prompt = f"""You are a helpful assistant for a mobile mapping campaign with {self.campaign.total_features} features and {self.campaign.total_images} image positions.
+        system_prompt = f"""You are a helpful assistant for a mobile mapping campaign in San Bernardino with {self.campaign.total_features} features and {self.campaign.total_images} image positions.
 
 Use the provided tools to answer user questions. Your text responses should be plain, natural language only.
 
@@ -364,7 +376,9 @@ TOOL USAGE:
 - find_richest_image: Find image position with most features
 - query_images: Get total image count
 
-Feature types: stop_sign, speed_limit, crosswalk, guardrail, pole
+HORIZONTAL FEATURES (on ground): pavement_damage, road_marking, manhole_cover, drainage_grate, pavement_patch
+VERTICAL FEATURES (above ground): traffic_sign, street_light, utility_pole, trash_bin, fire_hydrant, traffic_light, vegetation
+
 Conditions: good, fair, poor, damaged"""
 
         # Start with system prompt + conversation history

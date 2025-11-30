@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import maplibregl from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
+  import ImageViewer from '$lib/ImageViewer.svelte';
   
   const API_BASE = 'http://localhost:8000';
   
@@ -17,20 +18,51 @@
   let showTools = false;
   let showHelp = false;
   let currentMapStyle = 'dark';
-  let campaignData = null; // Cache campaign data
-  let isChangingStyle = false; // Prevent rapid style changes
+  let campaignData = null;
+  let isChangingStyle = false;
+  let cogInfo = null;
+  
+  let imageViewerVisible = false;
+  let selectedImageId = null;
+  let selectedImagePath = '';
+  let highlightedFeatureIds = [];
+  
+  let hoverInfo = null;
+  let hoverPosition = { x: 0, y: 0 };
+  
+  function getFeatureIcon(featureType) {
+    // All features use gray pin
+    return '/icons/feature-icon.svg';
+  }
   
   // Available map styles
   const mapStyles = {
-    streets: {
-      name: 'Streets',
-      url: 'https://demotiles.maplibre.org/style.json',
-      icon: '🗺️'
+    dark: {
+      name: 'Dark',
+      url: {
+        "version": 8,
+        "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+        "sources": {
+          "dark": {
+            "type": "raster",
+            "tiles": ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
+            "tileSize": 256,
+            "attribution": "© CARTO"
+          }
+        },
+        "layers": [{
+          "id": "dark",
+          "type": "raster",
+          "source": "dark"
+        }]
+      },
+      icon: '🌙'
     },
     satellite: {
       name: 'Satellite',
       url: {
         "version": 8,
+        "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
         "sources": {
           "satellite": {
             "type": "raster",
@@ -49,46 +81,32 @@
       },
       icon: '🛰️'
     },
-    topo: {
-      name: 'Topographic',
+    ortho: {
+      name: 'Orthophoto',
       url: {
         "version": 8,
+        "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
         "sources": {
-          "topo": {
+          "ortho": {
             "type": "raster",
-            "tiles": ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
+            "tiles": [`${API_BASE}/cog/tiles/{z}/{x}/{y}.png`],
             "tileSize": 256,
-            "attribution": "© OpenTopoMap"
+            "attribution": "© Cyclomedia"
           }
         },
         "layers": [{
-          "id": "topo",
+          "id": "ortho",
           "type": "raster",
-          "source": "topo"
+          "source": "ortho"
         }]
       },
-      icon: '⛰️'
+      icon: '🚗'
     },
-    dark: {
-      name: 'Dark',
-      url: {
-        "version": 8,
-        "sources": {
-          "dark": {
-            "type": "raster",
-            "tiles": ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
-            "tileSize": 256,
-            "attribution": "© CARTO"
-          }
-        },
-        "layers": [{
-          "id": "dark",
-          "type": "raster",
-          "source": "dark"
-        }]
-      },
-      icon: '🌙'
-    }
+    streets: {
+      name: 'Streets',
+      url: 'https://demotiles.maplibre.org/style.json',
+      icon: '🗺️'
+    },
   };
   
   // Initialize map
@@ -97,21 +115,74 @@
     const campaignRes = await fetch(`${API_BASE}/campaign`);
     campaignData = await campaignRes.json();
     
-    // Initialize map (Vienna center)
+    // Fetch COG info to center map on it
+    try {
+      const cogRes = await fetch(`${API_BASE}/cog/info`);
+      cogInfo = await cogRes.json();
+      console.log('✓ COG loaded:', cogInfo);
+    } catch (e) {
+      console.log('⚠️ COG not available:', e);
+    }
+    
+    // Listen for image navigation events from Krpano viewer
+    window.addEventListener('navigate', (event) => {
+      const targetImageId = event.detail.imageId;
+      console.log('🔄 Navigation event received, switching to image:', targetImageId);
+      
+      selectedImageId = targetImageId;
+      selectedImagePath = `${API_BASE}/images/${targetImageId}`;
+      // imageViewerVisible stays true, the viewer will reinitialize with new image
+    });
+    
+    // Initialize map - use COG center if available, otherwise San Bernardino
+    const center = cogInfo ? cogInfo.center : [-117.491325, 34.108351];
+    const zoom = cogInfo ? 14 : 13;
+    
     map = new maplibregl.Map({
       container: mapContainer,
       style: mapStyles[currentMapStyle].url,
-      center: [16.3738, 48.2082],
-      zoom: 12
+      center: center,
+      zoom: zoom
     });
     
     map.on('load', () => {
       console.log('✓ Initial map load complete');
-      addCampaignLayers(false);
+      
+      // Load simple icon set
+      const icons = [
+        { name: 'camera-icon', src: '/icons/camera-capture-icon.svg', size: 24 },
+        { name: 'feature-icon', src: '/icons/feature-icon.svg', size: 24 },
+        { name: 'highlighted-icon', src: '/icons/highlighted-icon.svg', size: 32 }
+      ];
+      
+      let loadedCount = 0;
+      const totalIcons = icons.length;
+      
+      icons.forEach(icon => {
+        const img = new Image(icon.size, icon.size);
+        img.onload = () => {
+          if (!map.hasImage(icon.name)) {
+            map.addImage(icon.name, img);
+          }
+          loadedCount++;
+          if (loadedCount === totalIcons) {
+            console.log('✓ All icons loaded:', totalIcons);
+            addCampaignLayers();
+          }
+        };
+        img.onerror = (e) => {
+          console.error('❌ Failed to load icon:', icon.name);
+          loadedCount++;
+          if (loadedCount === totalIcons) {
+            addCampaignLayers();
+          }
+        };
+        img.src = icon.src;
+      });
     });
   });
   
-  function addCampaignLayers(skipCleanup = false) {
+  function addCampaignLayers() {
     if (!map || !campaignData) {
       console.log('❌ Cannot add layers - map or data missing');
       return;
@@ -123,31 +194,29 @@
       images: campaignData.images.length
     });
     
-    // Remove existing layers if they exist (but only if not skipping cleanup)
-    if (!skipCleanup) {
-      ['highlighted-layer', 'highlighted-images-layer', 'features-layer', 'images-layer'].forEach(layerId => {
-        if (map.getLayer(layerId)) {
-          try {
-            map.removeLayer(layerId);
-            console.log('✓ Removed layer:', layerId);
-          } catch (e) {
-            console.log('⚠️ Could not remove layer:', layerId, e.message);
-          }
+    // Always remove existing layers/sources first
+    ['highlighted-layer', 'highlighted-circle-bg', 'highlighted-images-layer', 'features-layer', 'images-layer'].forEach(layerId => {
+      if (map.getLayer(layerId)) {
+        try {
+          map.removeLayer(layerId);
+          console.log('✓ Removed layer:', layerId);
+        } catch (e) {
+          console.log('⚠️ Could not remove layer:', layerId, e.message);
         }
-      });
-      
-      // Remove existing sources if they exist
-      ['highlighted', 'highlighted-images', 'features', 'images'].forEach(sourceId => {
-        if (map.getSource(sourceId)) {
-          try {
-            map.removeSource(sourceId);
-            console.log('✓ Removed source:', sourceId);
-          } catch (e) {
-            console.log('⚠️ Could not remove source:', sourceId, e.message);
-          }
+      }
+    });
+    
+    // Remove existing sources
+    ['highlighted', 'highlighted-images', 'features', 'images'].forEach(sourceId => {
+      if (map.getSource(sourceId)) {
+        try {
+          map.removeSource(sourceId);
+          console.log('✓ Removed source:', sourceId);
+        } catch (e) {
+          console.log('⚠️ Could not remove source:', sourceId, e.message);
         }
-      });
-    }
+      }
+    });
     
     // Now add everything fresh
     try {
@@ -169,19 +238,39 @@
         }
       });
       
-      // Add default feature markers (small gray dots)
-      map.addLayer({
-        id: 'features-layer',
-        type: 'circle',
-        source: 'features',
-        paint: {
-          'circle-radius': 4,
-          'circle-color': '#888',
-          'circle-opacity': 0.6
-        }
-      });
+      // Add default feature markers (gray pin)
+      if (map.hasImage('feature-icon')) {
+        map.addLayer({
+          id: 'features-layer',
+          type: 'symbol',
+          source: 'features',
+          layout: {
+            'icon-image': 'feature-icon',
+            'icon-size': 1.0,
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true
+          }
+        });
+        console.log('✓ Features layer added with gray pins:', campaignData.features.length, 'features');
+      } else {
+        // Fallback to circles if icon not loaded yet
+        map.addLayer({
+          id: 'features-layer',
+          type: 'circle',
+          source: 'features',
+          paint: {
+            'circle-radius': 8,
+            'circle-color': '#FF6B6B',
+            'circle-opacity': 0.85,
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#FFFFFF',
+            'circle-stroke-opacity': 1.0
+          }
+        });
+        console.log('✓ Features layer added with circles (fallback):', campaignData.features.length, 'features');
+      }
       
-      // Add image positions
+      // Add image positions (white circles - camera positions)
       map.addSource('images', {
         type: 'geojson',
         data: {
@@ -198,15 +287,74 @@
         }
       });
       
+      // Add camera/car icons for image positions
       map.addLayer({
         id: 'images-layer',
-        type: 'circle',
+        type: 'symbol',
         source: 'images',
-        paint: {
-          'circle-radius': 6,
-          'circle-color': '#3887be',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#fff'
+        layout: {
+          'icon-image': 'camera-icon',
+          'icon-size': 1.0,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true
+        }
+      });
+      
+      // Hover handlers for images - show info on hover
+      map.on('mouseenter', 'images-layer', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      
+      map.on('mousemove', 'images-layer', (e) => {
+        if (e.features && e.features.length > 0) {
+          const feature = e.features[0];
+          hoverInfo = {
+            type: 'image',
+            id: feature.id,
+            data: feature.properties
+          };
+          hoverPosition = { x: e.point.x, y: e.point.y };
+        }
+      });
+      
+      map.on('mouseleave', 'images-layer', () => {
+        map.getCanvas().style.cursor = '';
+        hoverInfo = null;
+      });
+      
+      // Hover handlers for features - show info on hover
+      map.on('mouseenter', 'features-layer', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      
+      map.on('mousemove', 'features-layer', (e) => {
+        if (e.features && e.features.length > 0) {
+          const feature = e.features[0];
+          hoverInfo = {
+            type: 'feature',
+            id: feature.id,
+            data: feature.properties
+          };
+          hoverPosition = { x: e.point.x, y: e.point.y };
+        }
+      });
+      
+      map.on('mouseleave', 'features-layer', () => {
+        map.getCanvas().style.cursor = '';
+        hoverInfo = null;
+      });
+      
+      // Click handler for images - open 360° viewer
+      map.on('click', 'images-layer', (e) => {
+        if (e.features && e.features.length > 0) {
+          const feature = e.features[0];
+          const imageId = feature.id;
+          console.log('📸 Image clicked:', imageId, feature.properties);
+          
+          // Image served from backend API
+          selectedImageId = imageId;
+          selectedImagePath = `${API_BASE}/images/${imageId}`;
+          imageViewerVisible = true;
         }
       });
       
@@ -234,6 +382,32 @@
     });
   }
   
+  // Feature type to icon mapping (colors + emoji icons)
+  const featureTypeIcons = {
+    // Horizontal (ground features)
+    'pavement_damage': { color: '#E74C3C', emoji: '🔴', label: 'Damage' },
+    'road_marking': { color: '#F39C12', emoji: '🟠', label: 'Marking' },
+    'manhole_cover': { color: '#7F8C8D', emoji: '⚫', label: 'Manhole' },
+    'drainage_grate': { color: '#3498DB', emoji: '🔵', label: 'Drain' },
+    'pavement_patch': { color: '#95A5A6', emoji: '⬜', label: 'Patch' },
+    
+    // Vertical (signs/poles)
+    'traffic_sign': { color: '#E67E22', emoji: '🛑', label: 'Sign' },
+    'traffic_light': { color: '#27AE60', emoji: '🚦', label: 'Light' },
+    'street_light': { color: '#F1C40F', emoji: '💡', label: 'Lamp' },
+    'utility_pole': { color: '#8E44AD', emoji: '📍', label: 'Pole' },
+    'trash_bin': { color: '#16A085', emoji: '🗑️', label: 'Bin' },
+    'fire_hydrant': { color: '#C0392B', emoji: '🚒', label: 'Hydrant' },
+    'vegetation': { color: '#2ECC71', emoji: '🌳', label: 'Tree' },
+    
+    // Old types (fallback)
+    'stop_sign': { color: '#E74C3C', emoji: '🛑', label: 'Stop' },
+    'speed_limit': { color: '#F39C12', emoji: '⚠️', label: 'Speed' },
+    'crosswalk': { color: '#3498DB', emoji: '🚶', label: 'Cross' },
+    'guardrail': { color: '#7F8C8D', emoji: '🛡️', label: 'Guard' },
+    'pole': { color: '#8E44AD', emoji: '📍', label: 'Pole' },
+  };
+
   function highlightFeatures(featureIds, color = '#FF0000', label = null) {
     // Remove old highlights
     clearHighlights();
@@ -241,14 +415,20 @@
     // Skip if no features to highlight
     if (!featureIds || featureIds.length === 0) {
       console.log('No features to highlight');
+      highlightedFeatureIds = [];
       return;
     }
     
-    // Add new highlight layer
+    // Store highlighted feature IDs for image viewer projections
+    highlightedFeatureIds = featureIds;
+    
+    // Add new highlight layer with custom icons
     const sourceData = map.getSource('features')._data;
+    const highlightedFeatures = sourceData.features.filter(f => featureIds.includes(f.id));
+    
     const highlightedData = {
       type: 'FeatureCollection',
-      features: sourceData.features.filter(f => featureIds.includes(f.id))
+      features: highlightedFeatures
     };
     
     if (map.getSource('highlighted')) {
@@ -259,16 +439,16 @@
         data: highlightedData
       });
       
+      // Add highlighted icon layer (red pin, larger)
       map.addLayer({
         id: 'highlighted-layer',
-        type: 'circle',
+        type: 'symbol',
         source: 'highlighted',
-        paint: {
-          'circle-radius': 10,
-          'circle-color': color,
-          'circle-opacity': 0.8,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#fff'
+        layout: {
+          'icon-image': 'highlighted-icon',
+          'icon-size': 1.0,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true
         }
       });
     }
@@ -288,7 +468,7 @@
   }
   
   function highlightImages(imageIds, color = '#0000FF', label = null) {
-    // Highlight specific image positions
+    // Highlight specific image positions with distinct styling
     const sourceData = map.getSource('images')._data;
     const highlightedData = {
       type: 'FeatureCollection',
@@ -303,16 +483,17 @@
         data: highlightedData
       });
       
+      // Highlighted images: larger with animated effect
       map.addLayer({
         id: 'highlighted-images-layer',
         type: 'circle',
         source: 'highlighted-images',
         paint: {
-          'circle-radius': 12,
-          'circle-color': color,
-          'circle-opacity': 0.9,
-          'circle-stroke-width': 3,
-          'circle-stroke-color': '#fff'
+          'circle-radius': 14,
+          'circle-color': '#FFD700',  // Gold color for selected images
+          'circle-opacity': 0.95,
+          'circle-stroke-width': 4,
+          'circle-stroke-color': '#FFFFFF'
         }
       });
     }
@@ -334,18 +515,28 @@
   }
   
   function clearHighlights() {
+    // Clear highlighted feature IDs
+    highlightedFeatureIds = [];
+    
+    // Remove feature highlight layers
     if (map.getLayer('highlighted-layer')) {
       map.removeLayer('highlighted-layer');
+    }
+    if (map.getLayer('highlighted-circle-bg')) {
+      map.removeLayer('highlighted-circle-bg');
     }
     if (map.getSource('highlighted')) {
       map.removeSource('highlighted');
     }
+    
+    // Remove image highlight layers
     if (map.getLayer('highlighted-images-layer')) {
       map.removeLayer('highlighted-images-layer');
     }
     if (map.getSource('highlighted-images')) {
       map.removeSource('highlighted-images');
     }
+    
     statsBox = null;
   }
   
@@ -443,11 +634,11 @@
       
       // Wait a bit for the style to fully initialize, then restore
       styleLoadTimeout = setTimeout(() => {
-        console.log('✓ Starting layer restoration...');
+          console.log('✓ Starting layer restoration...');
         
         try {
           // Re-add all campaign layers using cached data
-          addCampaignLayers(true); // Skip cleanup since we just changed styles
+          addCampaignLayers();
           
           // Small delay before adding highlights
           setTimeout(() => {
@@ -455,24 +646,13 @@
             if (highlightedData && highlightedData.features && highlightedData.features.length > 0) {
               console.log('✓ Restoring', highlightedData.features.length, 'highlighted features');
               try {
-                map.addSource('highlighted', {
-                  type: 'geojson',
-                  data: highlightedData
-                });
+                // Get feature IDs to re-highlight
+                const featureIds = highlightedData.features.map(f => f.id);
                 
-                map.addLayer({
-                  id: 'highlighted-layer',
-                  type: 'circle',
-                  source: 'highlighted',
-                  paint: {
-                    'circle-radius': 10,
-                    'circle-color': highlightedColor,
-                    'circle-opacity': 0.8,
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': '#fff'
-                  }
-                });
-                console.log('✅ Highlighted features restored');
+                // Use the highlight function to restore with proper icons
+                highlightFeatures(featureIds, highlightedColor);
+                
+                console.log('✅ Highlighted features restored with icons');
               } catch (e) {
                 console.error('❌ Error restoring highlights:', e.message);
               }
@@ -626,10 +806,11 @@
         <div class="help-section">
           <h4>🔍 Finding Features</h4>
           <ul>
-            <li on:click={() => useExampleQuestion("show me all stop signs")}>show me all stop signs</li>
-            <li on:click={() => useExampleQuestion("find damaged guardrails")}>find damaged guardrails</li>
-            <li on:click={() => useExampleQuestion("show crosswalks in poor condition")}>show crosswalks in poor condition</li>
-            <li on:click={() => useExampleQuestion("highlight all poles")}>highlight all poles</li>
+            <li on:click={() => useExampleQuestion("show me all traffic signs")}>show me all traffic signs</li>
+            <li on:click={() => useExampleQuestion("find damaged pavement")}>find damaged pavement</li>
+            <li on:click={() => useExampleQuestion("show all manhole covers")}>show all manhole covers</li>
+            <li on:click={() => useExampleQuestion("highlight street lights")}>highlight street lights</li>
+            <li on:click={() => useExampleQuestion("show fire hydrants")}>show fire hydrants</li>
           </ul>
         </div>
         
@@ -637,9 +818,9 @@
           <h4>📷 Image Questions</h4>
           <ul>
             <li on:click={() => useExampleQuestion("which image has the most features?")}>which image has the most features?</li>
-            <li on:click={() => useExampleQuestion("show images containing stop signs")}>show images containing stop signs</li>
+            <li on:click={() => useExampleQuestion("show images containing traffic signs")}>show images containing traffic signs</li>
             <li on:click={() => useExampleQuestion("which image has the most damaged features?")}>which image has the most damaged features?</li>
-            <li on:click={() => useExampleQuestion("images with guardrails")}>images with guardrails</li>
+            <li on:click={() => useExampleQuestion("images with utility poles")}>images with utility poles</li>
           </ul>
         </div>
         
@@ -651,13 +832,26 @@
         </div>
         
         <div class="help-section">
-          <h4>📊 Feature Types</h4>
+          <h4>📊 Horizontal Features (Ground)</h4>
           <div class="feature-tags">
-            <span class="tag">stop signs</span>
-            <span class="tag">speed limits</span>
-            <span class="tag">crosswalks</span>
-            <span class="tag">guardrails</span>
-            <span class="tag">poles</span>
+            <span class="tag">pavement damage</span>
+            <span class="tag">road markings</span>
+            <span class="tag">manhole covers</span>
+            <span class="tag">drainage grates</span>
+            <span class="tag">pavement patches</span>
+          </div>
+        </div>
+        
+        <div class="help-section">
+          <h4>🏗️ Vertical Features (Above Ground)</h4>
+          <div class="feature-tags">
+            <span class="tag">traffic signs</span>
+            <span class="tag">traffic lights</span>
+            <span class="tag">street lights</span>
+            <span class="tag">utility poles</span>
+            <span class="tag">trash bins</span>
+            <span class="tag">fire hydrants</span>
+            <span class="tag">vegetation</span>
           </div>
         </div>
         
@@ -760,6 +954,61 @@
   
   <!-- Map -->
   <div class="map-container" bind:this={mapContainer}></div>
+  
+  <!-- Hover Inspector -->
+  {#if hoverInfo}
+  <div 
+    class="hover-inspector"
+    style="left: {hoverPosition.x + 15}px; top: {hoverPosition.y + 15}px;"
+  >
+    <div class="hover-header">
+      {#if hoverInfo.type === 'feature' && hoverInfo.data.type}
+        <img src={getFeatureIcon(hoverInfo.data.type)} alt="icon" class="hover-icon" />
+      {/if}
+      {hoverInfo.type === 'image' ? '📸 Image' : 'Feature'}
+    </div>
+    <div class="hover-content">
+      {#if hoverInfo.type === 'image'}
+        <div class="hover-row">
+          <span class="hover-label">ID:</span>
+          <span class="hover-value">{hoverInfo.id}</span>
+        </div>
+        {#if hoverInfo.data.timestamp}
+        <div class="hover-row">
+          <span class="hover-label">Time:</span>
+          <span class="hover-value">{new Date(hoverInfo.data.timestamp).toLocaleString()}</span>
+        </div>
+        {/if}
+      {:else}
+        <div class="hover-row">
+          <span class="hover-label">Type:</span>
+          <span class="hover-value">{hoverInfo.data.type ? hoverInfo.data.type.replace('_', ' ') : 'Unknown'}</span>
+        </div>
+        {#if hoverInfo.data.condition}
+        <div class="hover-row">
+          <span class="hover-label">Condition:</span>
+          <span class="hover-value">{hoverInfo.data.condition}</span>
+        </div>
+        {/if}
+        {#if hoverInfo.data.confidence}
+        <div class="hover-row">
+          <span class="hover-label">Confidence:</span>
+          <span class="hover-value">{Math.round(hoverInfo.data.confidence * 100)}%</span>
+        </div>
+        {/if}
+      {/if}
+    </div>
+  </div>
+  {/if}
+
+  <!-- 360° Image Viewer -->
+  <ImageViewer 
+    imageId={selectedImageId}
+    imagePath={selectedImagePath}
+    visible={imageViewerVisible}
+    highlightedFeatures={highlightedFeatureIds}
+    onClose={() => imageViewerVisible = false}
+  />
 </div>
 
 <style>
@@ -1207,6 +1456,58 @@
   .map-container {
     flex: 1;
     position: relative;
+  }
+  
+  .hover-inspector {
+    position: fixed;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    padding: 0;
+    z-index: 10000;
+    pointer-events: none;
+    min-width: 200px;
+    font-size: 12px;
+  }
+  
+  .hover-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 8px 8px 0 0;
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .hover-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  
+  .hover-content {
+    padding: 10px 12px;
+  }
+  
+  .hover-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    gap: 12px;
+  }
+  
+  .hover-label {
+    color: #666;
+    font-weight: 500;
+  }
+  
+  .hover-value {
+    color: #333;
+    font-weight: 600;
+    text-align: right;
   }
 </style>
 

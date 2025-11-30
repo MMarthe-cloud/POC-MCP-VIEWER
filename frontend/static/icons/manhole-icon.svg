@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
+  <!-- Outer circle -->
+  <circle cx="12" cy="12" r="10" fill="#7F8C8D" stroke="#FFFFFF" stroke-width="2"/>
+  <!-- Inner pattern (grid) -->
+  <circle cx="12" cy="12" r="7" fill="none" stroke="#BDC3C7" stroke-width="1"/>
+  <circle cx="12" cy="12" r="4" fill="none" stroke="#BDC3C7" stroke-width="1"/>
+  <line x1="12" y1="5" x2="12" y2="19" stroke="#BDC3C7" stroke-width="1"/>
+  <line x1="5" y1="12" x2="19" y2="12" stroke="#BDC3C7" stroke-width="1"/>
+</svg>
+

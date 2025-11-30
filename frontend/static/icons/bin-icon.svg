@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
+  <!-- Bin body (trapezoid) -->
+  <path d="M8 9 L7 21 L17 21 L16 9 Z" fill="#27AE60" stroke="#FFFFFF" stroke-width="2"/>
+  <!-- Lid -->
+  <rect x="6" y="7" width="12" height="2" rx="1" fill="#229954"/>
+  <!-- Handle -->
+  <path d="M9 7 L9 5 Q9 3 12 3 Q15 3 15 5 L15 7" stroke="#229954" stroke-width="2" fill="none"/>
+</svg>
+

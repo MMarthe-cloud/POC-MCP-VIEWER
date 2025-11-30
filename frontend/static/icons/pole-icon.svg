@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
+  <!-- Main pole -->
+  <rect x="10" y="4" width="4" height="18" fill="#8B4513" stroke="#FFFFFF" stroke-width="2" rx="1"/>
+  <!-- Cross arm -->
+  <rect x="6" y="7" width="12" height="2" fill="#6D4C41" rx="0.5"/>
+  <!-- Top insulator -->
+  <ellipse cx="12" cy="3" rx="3" ry="1.5" fill="#666666"/>
+</svg>

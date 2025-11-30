@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
+  <!-- Main body -->
+  <rect x="9" y="10" width="6" height="10" rx="1" fill="#C0392B" stroke="#FFFFFF" stroke-width="2"/>
+  <!-- Top cap -->
+  <rect x="8" y="8" width="8" height="3" rx="1" fill="#E74C3C"/>
+  <!-- Side nozzles -->
+  <rect x="5" y="13" width="4" height="2" rx="1" fill="#C0392B"/>
+  <rect x="15" y="13" width="4" height="2" rx="1" fill="#C0392B"/>
+  <!-- Base -->
+  <rect x="8" y="19" width="8" height="2" fill="#95A5A6"/>
+</svg>
+

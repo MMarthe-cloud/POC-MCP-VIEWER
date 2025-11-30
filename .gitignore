@@ -15,7 +15,7 @@ dist/
 .env
 .env.local
 
-# IDE
+# IDEc
 .vscode/
 .idea/
 *.swp
@@ -30,3 +30,5 @@ node_modules/
 .svelte-kit/
 dist/
 .vercel/
+
+mockup_data/

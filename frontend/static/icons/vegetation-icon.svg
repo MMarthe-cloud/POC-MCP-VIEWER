@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
+  <!-- Tree crown (three circles) -->
+  <circle cx="12" cy="8" r="4" fill="#2ECC71"/>
+  <circle cx="8" cy="11" r="3.5" fill="#27AE60"/>
+  <circle cx="16" cy="11" r="3.5" fill="#27AE60"/>
+  <!-- Trunk -->
+  <rect x="10" y="14" width="4" height="7" rx="1" fill="#8B4513"/>
+</svg>
+

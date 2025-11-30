@@ -9,8 +9,15 @@ from datetime import datetime
 class Feature(BaseModel):
     """A detected object in the campaign (sign, marking, guardrail, etc.)"""
     id: int
-    type: Literal["stop_sign", "speed_limit", "crosswalk", "guardrail", "pole"]
+    type: Literal[
+        # Horizontal features
+        "pavement_damage", "road_marking", "manhole_cover", "drainage_grate", "pavement_patch",
+        # Vertical features  
+        "traffic_sign", "street_light", "utility_pole", "trash_bin", "fire_hydrant", 
+        "traffic_light", "vegetation"
+    ]
     condition: Literal["good", "fair", "poor", "damaged"]
+    confidence: float = 0.85  # Detection confidence (0-1)
     geometry: dict  # GeoJSON point
     attributes: dict  # Type-specific attributes
     image_ids: list[int]  # Images where this feature appears
