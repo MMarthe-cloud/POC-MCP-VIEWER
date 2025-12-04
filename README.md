@@ -1,4 +1,4 @@
-# Mobile Mapping Viewer - MCP Test
+# Mobile Mapping Viewer - MCP
 
 Talk to the map through an LLM. No clicks, just conversation.
 
